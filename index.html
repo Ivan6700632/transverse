@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InkWave — Книги на українській</title>
+    <!-- Підключення офіційної клієнтської бібліотеки Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <!-- Кнопка з трьома смужками для списків читання -->
+            <button id="readingListMenuBtn" class="icon-btn" title="Мої списки читання" style="font-size: 1.1rem; padding: 0.4rem 0.6rem;">☰</button>
+            <div class="logo">📚 InkWave</div>
+        </div>
+
+        <div class="search-box-wrapper">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Пошук (назва, ім'я, прізвище)...">
+                <button id="clearSearchBtn" class="clear-search-btn" title="Очистити пошук">×</button>
+            </div>
+        </div>
+        <div class="header-right">
+            <button id="ratingModalBtn" class="action-btn" title="Рейтинг та топ книг" style="background: #eab308; color: #000;">🏆 Рейтинг</button>
+            <button id="requestsBtn" class="action-btn" title="Скарги та пропозиції">📝 Заявка</button>
+            <button id="adminPanelBtn" class="action-btn hidden" title="Панель адміністратора">🛠️ Адмін</button>
+            <button id="notificationsBtn" class="action-btn" style="background: #eab308; color: #000; position: relative;" title="Поштова скринька">📬 Скринька (<span id="notifCount">0</span>)</button>
+            <button id="themeToggle" class="icon-btn" title="Змінити тему">🌙</button>
+            <button id="profileBtn" class="profile-btn">👤 Увійти</button>
+        </div>
+    </header>
+
+    <nav class="categories">
+        <button class="cat-btn active" data-category="all">Усі</button>
+        <button class="cat-btn" data-category="Fantasy">Фентезі</button>
+        <button class="cat-btn" data-category="Romance">Романтика</button>
+        <button class="cat-btn" data-category="Horror">Жахи</button>
+        <button class="cat-btn" data-category="Sci-Fi">Наукова фантастика</button>
+        <button class="cat-btn" data-category="Detective">Детектив</button>
+        <button class="cat-btn" data-category="Adventure">Пригоди</button>
+        <button class="cat-btn" data-category="Historical">Історичний</button>
+        <button class="cat-btn" data-category="Manga">Манґа</button>
+        <button class="cat-btn" data-category="Manhwa">Манхва</button>
+        <button class="cat-btn" data-category="Ukrainian">Українська література</button>
+        <button class="cat-btn" data-category="Comics">Комікси</button>
+        <button class="cat-btn fav-filter" data-category="favorites">❤️ Улюблені</button>
+    </nav>
+
+    <main>
+        <div id="booksGrid" class="books-grid"></div>
+    </main>
+
+    <!-- Модальне вікно вибору списків читання (три смужки) -->
+    <div id="readingListsModal" class="modal hidden">
+        <div class="modal-content auth-content" style="max-width: 420px;">
+            <h2>📖 Мої списки читання</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Фільтруйте бібліотеку за вашим статусом читання:</p>
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 1rem;">
+                <button class="action-btn" data-statusfilter="all" style="justify-content: center; background: var(--bg-color); color: var(--text-color); border: 1px solid var(--border);">📂 Усі книжки бібліотеки</button>
+                <button class="action-btn" data-statusfilter="reading" style="justify-content: center; background: #3b82f6; color: white;">📖 Читаю</button>
+                <button class="action-btn" data-statusfilter="willRead" style="justify-content: center; background: #8b5cf6; color: white;">🕒 Буду читати</button>
+                <button class="action-btn" data-statusfilter="read" style="justify-content: center; background: #10b981; color: white;">✅ Прочитано</button>
+            </div>
+            <button id="closeReadingListsModal" class="close-btn" style="width: 100%;">Закрити</button>
+        </div>
+    </div>
+
+    <!-- Модальне вікно читалки та деталей книги -->
+    <div id="readerModal" class="modal hidden">
+        <div id="readerContentWrapper" class="modal-content">
+            <div class="modal-header">
+                <button id="closeModal" class="close-btn">← Назад до бібліотеки</button>
+                <div class="reader-controls">
+                    <select id="bookStatusSelect" title="Статус читання твору" style="padding: 0.4rem; border-radius: 6px; background: var(--bg-color); color: var(--text-color); border: 1px solid var(--border); font-weight: 600; cursor: pointer;">
+                        <option value="" disabled selected>📖 Статус твору</option>
+                        <option value="reading">📖 Читаю</option>
+                        <option value="willRead">🕒 Буду читати</option>
+                        <option value="read">✅ Прочитано</option>
+                        <option value="none">❌ Прибрати статус</option>
+                    </select>
+
+                    <button id="decreaseFont" title="Менший шрифт">A-</button>
+                    <button id="increaseFont" title="Більший шрифт">A+</button>
+                    <button id="bookmarkBtn" class="bookmark-btn">🔖 Закладка</button>
+                    <button id="fullscreenReaderBtn" class="icon-btn" title="Розгорнути вікно книги" style="font-size: 1rem;">⛶</button>
+                    <button id="deleteBookBtn" class="delete-book-btn hidden" style="background: #ef4444; color: white; border: none; padding: 0.5rem 0.8rem; border-radius: 6px; cursor: pointer; font-weight: 600;">🗑️ Видалити твір</button>
+                </div>
+            </div>
+            
+            <div class="book-details">
+                <img id="modalCover" src="" alt="Обкладинка">
+                <div class="book-info-detailed">
+                    <h2 id="modalTitle">Назва</h2>
+                    <p id="modalMeta" class="meta-info">Жанр • Переклад</p>
+                    <p id="modalDesc">Опис...</p>
+                    
+                    <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap;">
+                        <button id="likeBookBtn" class="action-btn" style="background: #ec4899; display: flex; align-items: center; gap: 5px;">❤️ <span id="likeCount">0</span></button>
+                    </div>
+
+                    <div class="rating-box">
+                        <span>⭐ Загальна оцінка книги: <strong id="bookAvgRating">5.0</strong> / 10</span>
+                        <div class="rate-input">
+                            <label>Ваша оцінка:</label>
+                            <select id="rateBookSelect">
+                                <option value="10">10 - Шедевр</option>
+                                <option value="9">9 - Чудово</option>
+                                <option value="8">8 - Дуже добре</option>
+                                <option value="7">7 - Добре</option>
+                                <option value="6">6 - Непогано</option>
+                                <option value="5" selected>5 - Середньо</option>
+                                <option value="4">4 - Слабо</option>
+                                <option value="3">3 - Погано</option>
+                                <option value="2">2 - Жахливо</option>
+                                <option value="1">1 - Жах</option>
+                            </select>
+                            <button id="submitBookRating">Оцінити книгу</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chapter-selector">
+                <label for="chapterSelect">Вибрати главу:</label>
+                <select id="chapterSelect"></select>
+            </div>
+
+            <div class="chapter-rating-box">
+                <span>⭐ Оцінка цієї глави: <strong id="chapterAvgRating">5.0</strong> / 10</span>
+                <div class="rate-input">
+                    <select id="rateChapterSelect">
+                        <option value="10">10</option><option value="9">9</option><option value="8">8</option>
+                        <option value="7">7</option><option value="6">6</option><option value="5" selected>5</option>
+                        <option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option>
+                    </select>
+                    <button id="submitChapterRating">Оцінити главу</button>
+                </div>
+            </div>
+
+            <div class="chapter-text-wrapper">
+                <button id="openPureTextBtn" class="expand-text-btn" title="Відкрити текст на весь екран">⛶</button>
+                <div id="chapterText" class="chapter-text"></div>
+            </div>
+
+            <div class="chapter-nav">
+                <button id="prevChapter">← Попередня</button>
+                <button id="nextChapter">Наступна →</button>
+            </div>
+
+            <div class="comments-section" style="margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                <h3>💬 Коментарі</h3>
+                <div id="commentsList" style="margin: 1rem 0; display: flex; flex-direction: column; gap: 10px;"></div>
+                
+                <form id="commentForm" class="hidden" style="margin-top: 1rem;">
+                    <div class="form-group">
+                        <textarea id="commentInput" rows="3" placeholder="Напишіть свій коментар..." required></textarea>
+                    </div>
+                    <button type="submit" class="read-btn">Надіслати коментар</button>
+                </form>
+                <p id="commentLoginNotice" style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.5rem;">Щоб писати коментарі, будь ласка, увійдіть в акаунт.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Окреме повноекранне полотно тільки для читання тексту -->
+    <div id="pureTextOverlay" class="pure-text-overlay hidden">
+        <div class="pure-top-bar">
+            <button id="closePureTextBtn" class="close-btn">← Назад</button>
+            
+            <div class="pure-top-right">
+                <button id="pureFontDec" class="close-btn" title="Менший шрифт">A-</button>
+                <button id="pureFontInc" class="close-btn" title="Більший шрифт">A+</button>
+                <button id="pureLikeBtn" class="action-btn" style="background: #ec4899; padding: 0.45rem 0.8rem; border-radius: 6px;">❤️ <span id="pureLikeCount">0</span></button>
+                
+                <div class="pure-rate-box">
+                    <span style="font-size: 0.85rem;">⭐ <strong id="pureChapterAvgRating">5.0</strong></span>
+                    <select id="pureRateChapterSelect">
+                        <option value="10">10</option><option value="9">9</option><option value="8">8</option>
+                        <option value="7">7</option><option value="6">6</option><option value="5" selected>5</option>
+                        <option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option>
+                    </select>
+                    <button id="pureSubmitChapterRating">Оцінити главу</button>
+                </div>
+
+                <button id="pureBookmarkBtn" class="bookmark-btn">🔖 Закладка</button>
+            </div>
+        </div>
+
+        <div class="pure-body-scroll">
+            <h3 id="pureChapterTitle" style="margin-bottom: 1rem; color: var(--accent);">Глава</h3>
+            <div id="pureChapterText" class="pure-chapter-text"></div>
+
+            <div id="pureCommentsDrawer" class="hidden" style="margin-top: 2.5rem; border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                <h4>💬 Коментарі до твору</h4>
+                <div id="pureCommentsList" style="margin: 1rem 0; display: flex; flex-direction: column; gap: 10px;"></div>
+                <form id="pureCommentForm" class="hidden" style="margin-top: 1rem;">
+                    <div class="form-group">
+                        <textarea id="pureCommentInput" rows="3" placeholder="Напишіть свій коментар..." required></textarea>
+                    </div>
+                    <button type="submit" class="read-btn">Надіслати коментар</button>
+                </form>
+                <p id="pureCommentLoginNotice" style="color: var(--text-muted); font-size: 0.9rem;">Щоб писати коментарі, будь ласка, увійдіть в акаунт.</p>
+            </div>
+        </div>
+
+        <div class="pure-bottom-bar">
+            <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+                <button id="pureToggleCommentsBtn" class="close-btn">💬 Коментарі (<span id="pureCommentsCount">0</span>)</button>
+                <button id="purePrevChapter" class="close-btn">← Попередня</button>
+            </div>
+            <button id="pureNextChapter" class="close-btn">Наступна →</button>
+        </div>
+    </div>
+
+    <!-- Модальне вікно Рейтингу книг за жанрами -->
+    <div id="ratingModal" class="modal hidden">
+        <div class="modal-content auth-content" style="max-width: 480px;">
+            <h2>🏆 Рейтинг книг за лайками</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Оберіть жанр, щоб переглянути топ найкращих творів:</p>
+            <div id="ratingGenresList" style="display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; margin-bottom: 1rem;"></div>
+            <button id="closeRatingModal" class="close-btn" style="width: 100%; background: #ef4444; color: white; border: none; font-weight: 600;">Закрити</button>
+        </div>
+    </div>
+
+    <!-- Модальне вікно Входу, Реєстрації та Профілю -->
+    <div id="authModal" class="modal hidden">
+        <div class="modal-content auth-content">
+            <h2>👤 Акаунт</h2>
+            
+            <div id="authTabs" class="request-tabs" style="margin-top: 0.8rem;">
+                <button type="button" class="req-tab-btn active" data-authtab="login">Увійти</button>
+                <button type="button" class="req-tab-btn" data-authtab="register">Зареєструватися</button>
+            </div>
+
+            <!-- Кнопка входу через Google -->
+            <button type="button" id="googleLoginBtn" class="action-btn" style="width: 100%; margin-top: 1rem; margin-bottom: 0.5rem; background: #ea4335; color: white; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600;">
+                <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1H12v2.8h5.35c-.23 1.25-1.4 3.65-5.35 3.65-3.22 0-5.85-2.66-5.85-5.85s2.63-5.85 5.85-5.85c1.83 0 3.05.78 3.75 1.45l2.15-2.12C16.65 3.9 14.55 3 12 3 7.03 3 3 7.03 3 12s4.03 9 9 9c5.2 0 8.65-3.65 8.65-8.8 0-.6-.05-1.05-.15-1.1z"/></svg>
+                Увійти через Google
+            </button>
+            <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.8rem;">або за допомогою акаунта</div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Нікнейм / Логін:</label>
+                    <input type="text" id="loginUsername" placeholder="Введіть нікнейм" required>
+                </div>
+                <div class="form-group">
+                    <label>Пароль:</label>
+                    <input type="password" id="loginPassword" placeholder="Введіть пароль" required>
+                </div>
+                <button type="submit" class="read-btn" style="width: 100%;">Увійти</button>
+            </form>
+
+            <form id="registerForm" class="hidden">
+                <div class="form-group">
+                    <label>Придумайте нікнейм:</label>
+                    <input type="text" id="regUsername" placeholder="Введіть нікнейм" required>
+                </div>
+                <div class="form-group">
+                    <label>Пароль:</label>
+                    <input type="password" id="regPassword" placeholder="Введіть пароль" required>
+                </div>
+                <div class="form-group">
+                    <label>Повторіть пароль:</label>
+                    <input type="password" id="regPasswordConfirm" placeholder="Повторіть пароль" required>
+                </div>
+                <button type="submit" class="read-btn" style="width: 100%;">Зареєструватися</button>
+            </form>
+
+            <div id="loggedInInfo" class="hidden" style="text-align: center; margin-top: 1rem;">
+                <div class="profile-avatar-section">
+                    <div id="profileAvatarPreview" class="avatar-large"></div>
+                    <div style="display: flex; gap: 6px; justify-content: center; margin-top: 8px; flex-wrap: wrap;">
+                        <label for="avatarUpload" class="action-btn" style="font-size: 0.85rem; padding: 0.4rem 0.8rem; cursor: pointer;">📷 Змінити іконку</label>
+                        <input type="file" id="avatarUpload" accept="image/*" class="hidden">
+                        <button type="button" id="removeAvatarBtn" class="close-btn" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">Прибрати фото</button>
+                    </div>
+                </div>
+
+                <p id="currentUserDisplay" style="font-weight: bold; margin: 0.8rem 0 0.4rem;"></p>
+                <div id="adminNotice" class="hidden" style="margin-bottom: 10px; color: #10b981; font-weight: bold;"></div>
+                <button id="logoutBtn" class="logout-btn">Вийти з акаунта</button>
+                <button id="deleteAccountBtn" class="hidden" style="margin-top: 0.5rem; background: #ef4444; color: white; border: none; padding: 0.6rem; border-radius: 6px; cursor: pointer; width: 100%; font-weight: 600;">🗑️ Видалити мій акаунт</button>
+            </div>
+
+            <button id="closeAuthModal" class="close-btn" style="margin-top: 1rem; width: 100%;">Закрити</button>
+        </div>
+    </div>
+
+    <!-- Модальне вікно Заявок / Скарг / Заяв із прокруткою та чекбоксом згоди -->
+    <div id="requestModal" class="modal hidden">
+        <div id="requestModalContent" class="modal-content scrollable-modal" style="max-width: 600px; max-height: 85vh;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <h2 style="margin: 0;">📝 Заявки, скарги та заяви</h2>
+                <button id="fullscreenRequestBtn" class="icon-btn" title="Розгорнути вікно" style="font-size: 1rem; padding: 0.3rem 0.6rem;">⛶</button>
+            </div>
+            
+            <div class="request-tabs" style="margin-top: 0.8rem;">
+                <button type="button" class="req-tab-btn active" data-tab="complaint">Поскаржитись</button>
+                <button type="button" class="req-tab-btn" data-tab="recommend">Рекомендувати твір</button>
+                <button type="button" class="req-tab-btn" data-tab="statement">Заява</button>
+            </div>
+            
+            <form id="complaintForm" class="req-form">
+                <div class="form-group">
+                    <label>Опишіть вашу скаргу:</label>
+                    <textarea id="complaintText" rows="4" placeholder="Що саме не так..." required></textarea>
+                </div>
+                <button type="submit" class="read-btn" style="width: 100%;">Надіслати скаргу</button>
+            </form>
+
+            <form id="recommendForm" class="req-form hidden">
+                <div class="form-group">
+                    <label>Назва твору:</label>
+                    <input type="text" id="recTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Ім'я автора:</label>
+                    <input type="text" id="recName" required>
+                </div>
+                <div class="form-group">
+                    <label>Прізвище автора:</label>
+                    <input type="text" id="recSurname" required>
+                </div>
+                <div class="form-group">
+                    <label>Жанр:</label>
+                    <select id="recGenre">
+                        <option value="Fantasy">Фентезі</option>
+                        <option value="Romance">Романтика</option>
+                        <option value="Horror">Жахи</option>
+                        <option value="Sci-Fi">Наукова фантастика</option>
+                        <option value="Detective">Детектив</option>
+                        <option value="Adventure">Пригоди</option>
+                        <option value="Historical">Історичний</option>
+                        <option value="Manga">Манґа</option>
+                        <option value="Manhwa">Манхва</option>
+                        <option value="Ukrainian">Українська література</option>
+                        <option value="Comics">Комікси</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Короткий опис:</label>
+                    <textarea id="recDesc" rows="2" required></textarea>
+                </div>
+
+                <!-- Макет сторінки твору -->
+                <div id="layoutPickerBox" class="layout-picker-box">
+                    <label style="font-weight: bold; display: block; margin-bottom: 6px;">Макет сторінки (оформлення твору):</label>
+                    <select id="bookLayoutSelect" style="width: 100%; padding: 0.6rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-color); color: var(--text-color); margin-bottom: 8px;">
+                        <option value="classic">Класичний макет (Обкладинка зліва)</option>
+                        <option value="banner">Широкий банер (Обкладинка зверху)</option>
+                        <option value="card">Картковий стиль (Центрована обкладинка)</option>
+                    </select>
+                    <label style="font-size: 0.85rem; display: block; margin-bottom: 4px;">Завантажити власний макет/обкладинку:</label>
+                    <input type="file" id="bookLayoutFile" accept="image/*" style="width: 100%;">
+                    <img id="layoutPreviewImg" class="layout-preview hidden" alt="Попередній перегляд">
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+                    <label style="font-weight: bold; margin: 0;">Глави та заголовки твору:</label>
+                    <button type="button" id="addChapterFieldBtn" class="action-btn" style="background: var(--accent); padding: 0.3rem 0.7rem; font-size: 0.85rem;">+ Додати главу</button>
+                </div>
+
+                <div id="chaptersContainer" style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px; max-height: 320px; overflow-y: auto; padding-right: 4px;">
+                    <div class="chapter-input-group" style="background: var(--bg-color); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <label class="chap-num-label" style="margin: 0; font-weight: bold; color: var(--accent);">Глава 1</label>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label style="font-size: 0.85rem; margin-bottom: 2px;">Заголовок:</label>
+                            <input type="text" class="rec-chap-title" placeholder="Наприклад: Пролог або Глава 1" required>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="font-size: 0.85rem; margin-bottom: 2px;">Текст твору:</label>
+                            <textarea class="rec-chap-content" rows="6" placeholder="Введіть повний текст глави тут..." required></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 1rem; margin-bottom: 1rem;">
+                    <input type="checkbox" id="recConsentCheck" required style="width: 18px; height: 18px; cursor: pointer;">
+                    <label for="recConsentCheck" style="margin: 0; font-size: 0.9rem; cursor: pointer;">
+                        Я надаю свою <span id="openConsentModalBtn" style="color: var(--accent); text-decoration: underline; font-weight: bold;">згоду</span> на публікацію твору.
+                    </label>
+                </div>
+
+                <button type="submit" class="read-btn" style="width: 100%;">Надіслати на розгляд адміну</button>
+            </form>
+
+            <form id="statementForm" class="req-form hidden">
+                <div class="form-group">
+                    <label>Ім'я автора:</label>
+                    <input type="text" id="statAuthorName" placeholder="Ім'я автора твору" required>
+                </div>
+                <div class="form-group">
+                    <label>Назва твору:</label>
+                    <input type="text" id="statBookTitle" placeholder="Назва вашої книги" required>
+                </div>
+                <div class="form-group">
+                    <label>Опишіть вашу заяву:</label>
+                    <textarea id="statText" rows="4" placeholder="Наприклад: прошу видалити главу 2 або змінити опис твору на..." required></textarea>
+                </div>
+                <button type="submit" class="read-btn" style="width: 100%;">Надіслати заяву</button>
+            </form>
+
+            <button id="closeRequestModal" class="close-btn" style="margin-top: 1rem; width: 100%;">Закрити</button>
+        </div>
+    </div>
+
+    <!-- Модальне вікно для інформації про Згоду -->
+    <div id="consentModal" class="modal hidden" style="z-index: 3000;">
+        <div class="modal-content auth-content" style="max-width: 440px;">
+            <h2>📜 Умови публікації та згода</h2>
+            <p style="line-height: 1.6; font-size: 0.95rem; margin: 1rem 0; color: var(--text-color);">
+                Натискаючи кнопку згоди, ви погоджуєтесь з публікацією вашого твору під нікнеймом, під прізвищем та ім'ям автора, що ви вказали. 
+                <br><br>
+                Якщо ви захочете видалити твір, ви повинні подати заявку в адміністрацію, яка буде переглянута та видалена в рахунок 15 днів.
+            </p>
+            <button id="closeConsentModal" class="read-btn" style="width: 100%;">Зрозуміло</button>
+        </div>
+    </div>
+
+    <!-- Модальне вікно Адмін-панелі -->
+    <div id="adminModal" class="modal hidden">
+        <div id="adminModalContent" class="modal-content scrollable-modal" style="max-width: 780px; max-height: 85vh;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 0.5rem;">
+                <h2 style="margin: 0;">🛠️ Панель адміністратора</h2>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button id="openBroadcastBtn" class="action-btn" style="background: #10b981;">📢 Загальне повідомлення</button>
+                    <button id="fullscreenAdminBtn" class="icon-btn" title="Розгорнути вікно" style="font-size: 1rem; padding: 0.3rem 0.6rem;">⛶</button>
+                </div>
+            </div>
+
+            <div class="request-tabs" style="margin-top: 1rem; flex-wrap: wrap;">
+                <button type="button" class="req-tab-btn active" data-admintab="incoming">Вхідні заявки</button>
+                <button type="button" class="req-tab-btn" data-admintab="history">Історія відповідей</button>
+                <button type="button" class="req-tab-btn" data-admintab="users">👥 База користувачів</button>
+                <button type="button" id="adminTabAdminsBtn" class="req-tab-btn hidden" data-admintab="admins" style="border-color: #eab308;">👑 Адміністратори</button>
+                <button type="button" id="adminTabDeletedBtn" class="req-tab-btn hidden" data-admintab="deleted" style="border-color: #ef4444; color: #ef4444; font-weight: bold;">🗑️ Видалена історія</button>
+            </div>
+
+            <div id="adminIncomingSection">
+                <div id="adminSubmissionsList" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 8px;">
+                    <p style="color: var(--text-muted);">Немає нових заявок.</p>
+                </div>
+            </div>
+
+            <div id="adminHistorySection" class="hidden">
+                <div id="adminHistoryList" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 8px;">
+                    <p style="color: var(--text-muted);">Історія відповідей порожня.</p>
+                </div>
+            </div>
+
+            <div id="adminUsersSection" class="hidden">
+                <div id="adminUsersList" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 10px;">
+                    <p style="color: var(--text-muted);">Користувачів немає.</p>
+                </div>
+            </div>
+
+            <div id="adminAdminsSection" class="hidden">
+                <div id="adminAdminsList" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 10px;"></div>
+            </div>
+
+            <div id="adminDeletedSection" class="hidden">
+                <div id="adminDeletedList" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border); padding: 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 10px;">
+                    <p style="color: var(--text-muted);">Видаленої історії поки немає.</p>
+                </div>
+            </div>
+
+            <button id="closeAdminModal" class="close-btn" style="margin-top: 1rem;">Закрити панель</button>
+        </div>
+    </div>
+
+    <!-- Модальне вікно для відповіді адміна -->
+    <div id="replyModal" class="modal hidden">
+        <div class="modal-content auth-content">
+            <h2>💬 Надіслати відповідь</h2>
+            <form id="replyForm">
+                <div class="form-group">
+                    <label>Текст відповіді користувачу:</label>
+                    <textarea id="replyText" rows="4" placeholder="Ваша відповідь..." required></textarea>
+                </div>
+                <button type="submit" class="read-btn" style="width: 100%;">Надіслати відповідь</button>
+            </form>
+            <button id="closeReplyModal" class="close-btn" style="margin-top: 1rem; width: 100%;">Скасувати</button>
+        </div>
+    </div>
+
+    <!-- Модальне вікно Загального повідомлення -->
+    <div id="broadcastModal" class="modal hidden">
+        <div class="modal-content auth-content">
+            <h2>📢 Загальне повідомлення</h2>
+            <form id="broadcastForm">
+                <div class="form-group">
+                    <label>Текст оголошення:</label>
+                    <textarea id="broadcastText" rows="4" placeholder="Текст оголошення..." required></textarea>
+                </div>
+                <button type="submit" class="read-btn" style="width: 100%; background: #10b981;">Розіслати всім</button>
+            </form>
+            <button id="closeBroadcastModal" class="close-btn" style="margin-top: 1rem; width: 100%;">Скасувати</button>
+        </div>
+    </div>
+    
+    <!-- Модальне вікно Поштової скриньки -->
+    <div id="notificationsModal" class="modal hidden">
+        <div class="modal-content" style="max-width: 550px;">
+            <h2>📬 Поштова скринька</h2>
+            <div id="userNotificationsList" style="margin-top: 1rem; max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
+                <p style="color: var(--text-muted);">Ваша скринька порожня.</p>
+            </div>
+            <button id="closeNotificationsModal" class="close-btn" style="margin-top: 1rem;">Закрити</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
