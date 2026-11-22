@@ -555,6 +555,12 @@ if (!document.getElementById('enhancedReaderStyles')) {
             .categories-container, .search-bar-wrapper { overflow-x: auto; padding-bottom: 4px; }
             .chapter-render-box { padding: 10px; }
             .a4-page-sheet { padding: 20px; }
+            .book-details { flex-direction: column; align-items: center; gap: 1rem; }
+            #modalCover { width: 100% !important; max-width: 260px; height: auto !important; aspect-ratio: 240 / 340; }
+            .book-info-detailed { width: 100%; min-width: 0; }
+            .rating-box, .chapter-rating-box { max-width: 100%; }
+            .rate-input select, .book-info-detailed .action-btn { max-width: 100%; }
+            .modal-content { overflow-x: hidden !important; }
         }
     `;
     document.head.appendChild(styleEl);
@@ -2001,27 +2007,55 @@ window.submitReply = async function(commentId) {
 window.deleteComment = async function(commentId) {
     if (!userProfile || !userProfile.isAdmin || !currentBook) return;
     if (!Array.isArray(currentBook.comments)) currentBook.comments = [];
-    const { error } = await _supabase.from('comments').delete().eq('id', commentId);
+    const { data, error } = await _supabase.from('comments').delete().eq('id', commentId).select('id');
     if (error) {
         alert('Не вдалося видалити коментар: ' + error.message);
+        return;
+    }
+    if (!data || data.length === 0) {
+        alert('Коментар не видалено: база не дозволила видалення. Увійдіть як адміністратор ще раз.');
         return;
     }
     currentBook.comments = currentBook.comments.filter(c => c.id !== commentId);
     renderComments();
 };
 
-// ── 79. ВИДАЛЕННЯ КНИГИ з бази (адмін) ──
+// ── 79. ВИДАЛЕННЯ КНИГИ з бази (адмін): перевіряє сесію й справжній результат видалення ──
+let deleteBookInFlight = false;
 deleteBookBtn?.addEventListener('click', async () => {
+    if (deleteBookInFlight) return;
     if (!currentBook || !userProfile || !userProfile.isAdmin) return;
-    if (confirm(`Ви впевнені, що хочете видалити твір "${currentBook.title}"?`)) {
-        const { error } = await _supabase.from('books').delete().eq('id', currentBook.id);
+
+    // Потрібна справжня сесія Supabase, а не лише запис у localStorage
+    const { data: sessionData } = await _supabase.auth.getSession();
+    if (!sessionData || !sessionData.session) {
+        alert('Сесію завершено. Увійдіть як адміністратор ще раз.');
+        return;
+    }
+
+    const bookId = currentBook.id;
+    const bookTitle = currentBook.title;
+    if (!confirm('Ви впевнені, що хочете видалити твір "' + bookTitle + '"?\nРазом із ним буде видалено всі його коментарі, лайки й оцінки. Це незворотно.')) return;
+
+    deleteBookInFlight = true;
+    deleteBookBtn.disabled = true;
+    try {
+        // Право видаляти має лише адмін — це перевіряє сама база (політика books_delete)
+        const { data, error } = await _supabase.from('books').delete().eq('id', bookId).select('id');
         if (error) {
             alert('Помилка при видаленні з бази даних: ' + error.message);
             return;
         }
-        booksData = booksData.filter(b => b.id !== currentBook.id);
+        if (!data || data.length === 0) {
+            alert('Книгу не видалено: база не дозволила видалення. Вийдіть, увійдіть знову як адміністратор і спробуйте ще раз.');
+            return;
+        }
+        booksData = booksData.filter(b => String(b.id) !== String(bookId));
         readerModal.classList.add('hidden');
         renderBooks();
+    } finally {
+        deleteBookInFlight = false;
+        deleteBookBtn.disabled = false;
     }
 });
 
